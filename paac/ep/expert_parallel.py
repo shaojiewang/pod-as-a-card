@@ -47,6 +47,29 @@ def __train():
         raise RuntimeError(f"{__file__} must be launched with either `mpirun` or `torchrun`!")
     NUM_NODES = WORLD_SIZE // LOCAL_SIZE
 
+    Utils.initialize_model_parallel(1, 1)
+    _set_random_seed(seed_=123, data_parallel_random_init=False)
+    self.transformer_config = TransformerConfig(
+        num_layers=1,
+        hidden_size=12,
+        num_attention_heads=4,
+        num_moe_experts=num_moe_experts,
+        use_cpu_initialization=True,
+        moe_token_dispatcher_type=moe_token_dispatcher_type,
+        moe_router_topk=2,
+        moe_aux_loss_coeff=0.01,
+        moe_grouped_gemm=grouped_gemm,
+        add_bias_linear=False,
+    )
+    
+    transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
+        num_experts=num_moe_experts, moe_grouped_gemm=grouped_gemm
+    )
+    moe_layer = MoELayer(
+        self.transformer_config, transformer_layer_spec.submodules.mlp.submodules
+    )
+    Utils.destroy_model_parallel()
+
     print(f"NUM_NODES={NUM_NODES}")
     pass
 

@@ -26,7 +26,7 @@ from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.training.initialize import _set_random_seed
 from tests.unit_tests.test_utilities import Utils
 
-from async_moe_layer import AsyncMoELayer
+from moe.async_moe_layer import AsyncMoELayer
 
 def __train():
     

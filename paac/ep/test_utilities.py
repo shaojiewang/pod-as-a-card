@@ -1,4 +1,4 @@
-mport os
+import os
 from datetime import timedelta
 
 import torch
@@ -27,7 +27,7 @@ class TestModel(torch.nn.Module):
 
 class Utils:
 
-    world_size = torch.cuda.device_count()
+    world_size = 1 #torch.cuda.device_count()
     rank = int(os.environ['LOCAL_RANK'])
     inited = False
     store = None
@@ -43,6 +43,7 @@ class Utils:
             init_method = 'tcp://'
             master_ip = os.getenv('MASTER_ADDR', 'localhost')
             master_port = os.getenv('MASTER_PORT', '6000')
+
             init_method += master_ip + ':' + master_port
             rendezvous_iterator = rendezvous(
                 init_method, Utils.rank, Utils.world_size, timeout=timedelta(minutes=1)

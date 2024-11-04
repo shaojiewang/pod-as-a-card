@@ -24,7 +24,7 @@ from megatron.core.transformer.moe.moe_layer import MoELayer
 from megatron.core.transformer.moe.router import Router
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.training.initialize import _set_random_seed
-from tests.unit_tests.test_utilities import Utils
+from test_utilities import Utils
 
 from moe.async_moe_layer import AsyncMoELayer
 
@@ -49,7 +49,12 @@ def __train():
 
     Utils.initialize_model_parallel(1, 1)
     _set_random_seed(seed_=123, data_parallel_random_init=False)
-    self.transformer_config = TransformerConfig(
+
+    num_moe_experts = 64
+    moe_token_dispatcher_type = "alltoall"
+    grouped_gemm = True
+
+    transformer_config = TransformerConfig(
         num_layers=1,
         hidden_size=12,
         num_attention_heads=4,
@@ -66,11 +71,10 @@ def __train():
         num_experts=num_moe_experts, moe_grouped_gemm=grouped_gemm
     )
     moe_layer = MoELayer(
-        self.transformer_config, transformer_layer_spec.submodules.mlp.submodules
+        transformer_config, transformer_layer_spec.submodules.mlp.submodules
     )
     Utils.destroy_model_parallel()
 
-    print(f"NUM_NODES={NUM_NODES}")
     pass
 
 if __name__ == "__main__":

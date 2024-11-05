@@ -73,7 +73,7 @@ def get_gpt_layer_with_transformer_engine_spec(
     """
     
     mlp = _get_mlp_module_spec(
-        use_te=True, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm, fp8=fp8
+        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm, fp8=fp8
     )
 
     if multi_latent_attention:

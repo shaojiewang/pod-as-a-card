@@ -9,7 +9,7 @@ import torch
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.module import MegatronModule
-from megatron.core.transformer.moe.experts import GroupedMLP, SequentialMLP, TEGroupedMLP
+from .experts import GroupedMLP, SequentialMLP, TEGroupedMLP
 # from megatron.core.transformer.moe.legacy_a2a_token_dispatcher import MoEAlltoAllSEQTokenDispatcher
 from .router import TopKRouter
 # from megatron.core.transformer.moe.shared_experts import SharedExpertMLP
@@ -95,8 +95,6 @@ class AsyncMoELayer(BaseMoELayer):
 
         # Initialize router
         self.router = TopKRouter(config=self.config)
-
-        print(self.router.weight.dtype)
 
         # Initialize experts
         if self.config.moe_grouped_gemm:

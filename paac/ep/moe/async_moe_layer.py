@@ -11,7 +11,7 @@ from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.moe.experts import GroupedMLP, SequentialMLP, TEGroupedMLP
 # from megatron.core.transformer.moe.legacy_a2a_token_dispatcher import MoEAlltoAllSEQTokenDispatcher
-from megatron.core.transformer.moe.router import TopKRouter
+from .router import TopKRouter
 # from megatron.core.transformer.moe.shared_experts import SharedExpertMLP
 from .shared_experts import SharedExpertMLP
 from megatron.core.transformer.moe.token_dispatcher import (
@@ -52,8 +52,9 @@ class BaseMoELayer(MegatronModule, ABC):
                 parallel_state.get_expert_model_parallel_rank() * self.num_local_experts
             )
 
-        self.use_shared_expert = self.config.moe_shared_expert_intermediate_size is not None
-        self.shared_expert_overlap = self.config.moe_shared_expert_overlap
+        self.use_shared_expert = None # self.config.moe_shared_expert_intermediate_size is not None
+
+        self.shared_expert_overlap = None # self.config.moe_shared_expert_overlap
 
         self.local_expert_indices = [
             local_expert_indices_offset + i for i in range(self.num_local_experts)
@@ -87,11 +88,15 @@ class AsyncMoELayer(BaseMoELayer):
         self, config: TransformerConfig, submodules: MLPSubmodules = None, layer_number: int = None
     ):
         self.submodules = submodules
-        super(MoELayer, self).__init__(config=config, layer_number=layer_number)
+        super(AsyncMoELayer, self).__init__(config=config, layer_number=layer_number)
         self.moe_layer_recompute = config.moe_layer_recompute
+
+        self.use_shared_expert = False # config.enable_shared_expert
 
         # Initialize router
         self.router = TopKRouter(config=self.config)
+
+        print(self.router.weight.dtype)
 
         # Initialize experts
         if self.config.moe_grouped_gemm:

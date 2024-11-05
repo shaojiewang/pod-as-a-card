@@ -14,12 +14,9 @@ import warnings
 
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel
 
-from megatron.core.models.gpt.gpt_layer_specs import (
-    get_gpt_layer_local_spec,
-    get_gpt_layer_with_transformer_engine_spec,
-)
 from megatron.core.transformer.moe.moe_layer import MoELayer
 from megatron.core.transformer.moe.router import Router
 from megatron.core.transformer.transformer_config import TransformerConfig
@@ -27,6 +24,10 @@ from megatron.training.initialize import _set_random_seed
 from test_utilities import Utils
 
 from moe.async_moe_layer import AsyncMoELayer
+from moe.gpt_layer_specs import (
+    get_gpt_layer_local_spec,
+    get_gpt_layer_with_transformer_engine_spec,
+)
 
 def __train():
     if "OMPI_COMM_WORLD_SIZE" in os.environ:
@@ -62,23 +63,26 @@ def __train():
         num_moe_experts=num_moe_experts,
         use_cpu_initialization=True,
         moe_token_dispatcher_type=moe_token_dispatcher_type,
-        moe_router_topk=2,
+        moe_router_topk=6,
         moe_aux_loss_coeff=0.01,
         moe_grouped_gemm=grouped_gemm,
         add_bias_linear=False,
+        params_dtype=torch.bfloat16,
+        bf16=True,
         activation_func=torch.nn.functional.silu,
         gated_linear_unit=True,
         bias_activation_fusion=True,
-        moe_router_load_balancing_type="sinkhorn",
     )
     
     transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
         num_experts=num_moe_experts, moe_grouped_gemm=grouped_gemm
     )
-    moe_layer = MoELayer(
+
+    print(f"submodules={transformer_layer_spec.submodules.mlp.submodules}")
+
+    moe_layer = AsyncMoELayer(
         transformer_config, transformer_layer_spec.submodules.mlp.submodules
     )
-
 
     moe_layer.cuda()
     # [sequence length, batch size, hidden size]
@@ -92,7 +96,9 @@ def __train():
     )
     hidden_states.retain_grad()
 
-    output_smm, _ = moe_layer(hidden_states)
+    moe_layer_ = moe_layer.bfloat16()
+
+    output_smm, _ = moe_layer_(hidden_states)
     output_smm.mean().backward()
 
 

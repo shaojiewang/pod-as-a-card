@@ -185,6 +185,8 @@ class GroupedMLP(MegatronModule):
                 permuted_local_hidden_states, w1, tokens_per_expert, trans_b=False
             )
 
+            print("group mlp")
+
             intermediate_parallel = self.activation_func(fc1_output)
 
             fc2_output = gg.ops.gmm(intermediate_parallel, w2, tokens_per_expert, trans_b=False)

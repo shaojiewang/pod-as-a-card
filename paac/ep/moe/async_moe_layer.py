@@ -21,6 +21,10 @@ from megatron.core.transformer.moe.token_dispatcher import (
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+from megatron.training import get_args
+
+#from .moe_alltoall_overlap import MoELayerOverlapAll2All
+
 @dataclass
 class MoESubmodules:
     """MoE Layer Submodule spec"""
@@ -76,6 +80,42 @@ class BaseMoELayer(MegatronModule, ABC):
         self.layer_number = layer_number
         self.router.set_layer_number(layer_number)
 
+
+class MoELayerOverlapAll2All(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, hidden_states, moe_layer: BaseMoELayer):
+        # args = get_args()
+        save_tensors = []
+        save_tensors_for_grad = []
+        ctx.input_shape = hidden_states.shape
+        hidden_states = hidden_states.detach()
+        hidden_states.requires_grad = True
+
+        # router
+        with torch.enable_grad():
+            scores, indices = moe_layer.router(hidden_states)
+
+        save_tensors.append(scores)
+        scores = scores.detach()
+        scores.requires_grad = True
+        save_tensors.append(scores)
+
+        save_tensors.append(indices)
+        ctx.save_for_backward(*save_tensors)
+
+        return scores, None 
+
+    @staticmethod
+    def backward(ctx, *args):
+        # global_args = get_args()
+        (route_graph, detach_scores,
+         indices
+        ) = ctx.saved_tensors
+
+        route_graph.backward(detach_scores.grad)
+        route_graph = None
+        grad_output = detach_input.grad
+        return grad_output, None
 
 class AsyncMoELayer(BaseMoELayer):
     """Mixture of experts Layer **currently only supports no token dropping**.
@@ -144,6 +184,8 @@ class AsyncMoELayer(BaseMoELayer):
                 "During training, performance may degrade if MoE and tensor parallelism"
                 "are enabled without also enabling sequence parallelism."
             )
+        
+        return MoELayerOverlapAll2All.apply(hidden_states, self)
 
         # process MoE
         def custom_forward(hidden_states):
@@ -165,7 +207,5 @@ class AsyncMoELayer(BaseMoELayer):
             output, mlp_bias = custom_forward(hidden_states)
 
         return output, mlp_bias
-
-
 
 

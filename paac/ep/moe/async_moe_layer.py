@@ -100,7 +100,12 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         scores.requires_grad = True
         save_tensors.append(scores)
 
+        print(f"forward scores={scores}")
+
         save_tensors.append(indices)
+
+
+        save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
 
         return scores, None 
@@ -109,10 +114,21 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
     def backward(ctx, *args):
         # global_args = get_args()
         (route_graph, detach_scores,
-         indices
+         indices, detach_input
         ) = ctx.saved_tensors
 
-        route_graph.backward(detach_scores.grad)
+        ctx.save_for_backward()
+
+        print(f"args={args}")
+
+        # detach_scores.retain_grad()
+        print(f"route_graph={route_graph}")
+        print(f"detach_scores={detach_scores}")
+        print(f"detach_scores.grad={detach_scores.grad}")
+
+        
+
+        route_graph.backward(args[0])
         route_graph = None
         grad_output = detach_input.grad
         return grad_output, None

@@ -138,24 +138,39 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         # permute 1
         save_tensors.append(permutated_local_input_tokens)
 
+        permutated_local_input_tokens = permutated_local_input_tokens.detach()
+        permutated_local_input_tokens.require_grad = True 
+        save_tensors.append(permutated_local_input_tokens)
+
+        print(f"permutated_local_input_tokens={permutated_local_input_tokens}")
+
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
 
-        return scores, None 
+        return permutated_local_input_tokens, None 
 
     @staticmethod
     def backward(ctx, *args):
         # global_args = get_args()
-        (route_graph, detach_scores,
-         permutated_local_input_tokens,
-         indices, detach_input
+        (route_graph, 
+         detach_scores,
+         indices, 
+         permute1_graph,
+         detach_permute1,
+         detach_input,
         ) = ctx.saved_tensors
 
         ctx.save_for_backward()
-        
-        
+       
+        print(f"args={args}")
 
-        route_graph.backward(args[0])
+        # permute1_graph.backward(args[0])
+ 
+        backward_func(permute1_graph, args[0])
+
+        #print(detach_scores.grad)
+
+        # route_graph.backward(detach_scores.grad)
         route_graph = None
         grad_output = detach_input.grad
         return grad_output, None

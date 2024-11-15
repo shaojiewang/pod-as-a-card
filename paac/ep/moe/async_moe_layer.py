@@ -24,6 +24,16 @@ from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.training import get_args
 
 #from .moe_alltoall_overlap import MoELayerOverlapAll2All
+from .moe_utils import (
+    forward_func, 
+    backward_func,
+    sort_chunks_by_idxs,
+)
+from megatron.core.transformer.moe.moe_utils import (
+    get_capacity,
+    permute,
+    unpermute,
+)
 
 @dataclass
 class MoESubmodules:
@@ -100,10 +110,33 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         scores.requires_grad = True
         save_tensors.append(scores)
 
-        print(f"forward scores={scores}")
+        # print(f"forward scores={scores}")
 
         save_tensors.append(indices)
 
+        if moe_layer.use_shared_expert:
+            ctx.shared_experts = moe_layer.shared_experts
+            #TODO: support TP here
+        
+        def alltoall_token_permutation1(hidden_states, indices):
+            tokens_per_expert = moe_layer.token_dispatcher.preprocess(indices)
+            # Flatten the input tensor
+            # hidden_states: [S/TP, B, H] -> [S*B/TP, H]
+            hidden_states = hidden_states.view(-1, ctx.input_shape[-1])
+            
+            # TODO: support TP here
+
+            # Permutation 1: input to AlltoAll input
+            moe_layer.token_dispatcher.local_input_tokens_global_experts_indices = indices
+            permutated_local_input_tokens, moe_layer.token_dispatcher.reversed_local_input_permutation_mapping = permute(
+                hidden_states, moe_layer.token_dispatcher.local_input_tokens_global_experts_indices, 
+            )
+            return tokens_per_expert, permutated_local_input_tokens
+
+        (tokens_per_expert, permutated_local_input_tokens), *_ = forward_func(alltoall_token_permutation1,
+                                                                          (hidden_states, indices))
+        # permute 1
+        save_tensors.append(permutated_local_input_tokens)
 
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
@@ -114,18 +147,12 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
     def backward(ctx, *args):
         # global_args = get_args()
         (route_graph, detach_scores,
+         permutated_local_input_tokens,
          indices, detach_input
         ) = ctx.saved_tensors
 
         ctx.save_for_backward()
-
-        print(f"args={args}")
-
-        # detach_scores.retain_grad()
-        print(f"route_graph={route_graph}")
-        print(f"detach_scores={detach_scores}")
-        print(f"detach_scores.grad={detach_scores.grad}")
-
+        
         
 
         route_graph.backward(args[0])

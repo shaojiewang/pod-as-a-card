@@ -35,6 +35,10 @@ from megatron.core.transformer.moe.moe_utils import (
     unpermute,
 )
 
+from .ccl_utils import (
+    async_all_to_all,
+)
+
 @dataclass
 class MoESubmodules:
     """MoE Layer Submodule spec"""

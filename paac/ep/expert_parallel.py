@@ -48,7 +48,19 @@ def __train():
         raise RuntimeError(f"{__file__} must be launched with either `mpirun` or `torchrun`!")
     NUM_NODES = WORLD_SIZE // LOCAL_SIZE
 
-    Utils.initialize_model_parallel(1, 1)
+    print(f"WORLD_RANK={WORLD_RANK}, LOCAL_RANK={LOCAL_RANK}, LOCAL_SIZE={LOCAL_SIZE}, WORLD_SIZE={WORLD_SIZE}")
+
+    tp_size = 1
+    pp_size = 1
+    ep_size = 2
+    cp_size = 1
+
+    Utils.initialize_model_parallel(
+        tensor_model_parallel_size=tp_size,
+        pipeline_model_parallel_size=pp_size,
+        expert_model_parallel_size=ep_size,
+        context_parallel_size=cp_size,
+    )
     _set_random_seed(seed_=123, data_parallel_random_init=False)
 
     num_moe_experts = 64
@@ -57,6 +69,8 @@ def __train():
     grouped_gemm = True
 
     transformer_config = TransformerConfig(
+        tensor_model_parallel_size=tp_size,
+        expert_model_parallel_size=ep_size,
         num_layers=1,
         hidden_size=hidden_size,
         num_attention_heads=4,

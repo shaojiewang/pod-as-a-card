@@ -148,11 +148,12 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
         # Perform expert parallel AlltoAll communication
         ep_group = parallel_state.get_expert_model_parallel_group()
-        _, global_input_tokens, permute1_ep_all_to_all_handle = async_all_to_all(
+        global_input_tokens, permute1_ep_all_to_all_handle = async_all_to_all(
+            ep_group,
             permutated_local_input_tokens,
             moe_layer.token_dispatcher.output_splits,
             moe_layer.token_dispatcher.input_splits,
-            ep_group,
+            True,
         )
 
         print(f"permutated_local_input_tokens={permutated_local_input_tokens}")

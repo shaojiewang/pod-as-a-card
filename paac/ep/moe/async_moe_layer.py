@@ -142,9 +142,9 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         # permute 1
         save_tensors.append(permutated_local_input_tokens)
 
-        permutated_local_input_tokens = permutated_local_input_tokens.detach()
-        permutated_local_input_tokens.require_grad = True 
-        save_tensors.append(permutated_local_input_tokens)
+        #permutated_local_input_tokens = permutated_local_input_tokens.detach()
+        #permutated_local_input_tokens.require_grad = True 
+        #save_tensors.append(permutated_local_input_tokens)
 
         # Perform expert parallel AlltoAll communication
         ep_group = parallel_state.get_expert_model_parallel_group()
@@ -160,9 +160,31 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         ctx.input_splits = moe_layer.token_dispatcher.input_splits
         ctx.router_topk = moe_layer.token_dispatcher.router_topk
 
+        permute1_ep_all_to_all_handle.wait()
+
+        # Permutation 2: AlltoAll output to expert input if num_local_experts > 1
+        if moe_layer.num_local_experts > 1:
+            def alltoall_token_permutation2(global_input_tokens):
+                global_input_tokens, moe_layer.token_dispatcher.reversed_global_input_permutation_mapping = permute(
+                    global_input_tokens, moe_layer.token_dispatcher.global_input_tokens_local_experts_indices
+                )
+
+                # TODO: add TP support here
+
+                return global_input_tokens
+
+            # token 重排2 input
+            (global_input_tokens), global_input_tokens_detach = forward_func(alltoall_token_permutation2,
+                                                                             global_input_tokens)
+            save_tensors.append(global_input_tokens_detach)
+            save_tensors.append(global_input_tokens)
+            save_tensors_for_grad.append(global_input_tokens_detach)
+            global_input_tokens_detach.untyped_storage().resize_(0)
+
         print(f"permutated_local_input_tokens={permutated_local_input_tokens}")
 
-        permute1_ep_all_to_all_handle.wait()
+        print(f"global_input_tokens={global_input_tokens}")
+
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
 
@@ -175,7 +197,8 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
          detach_scores,
          indices, 
          permute1_graph,
-         detach_permute1,
+         permute2_input_detach,
+         permute2_graph,
          detach_input,
         ) = ctx.saved_tensors
 
@@ -186,6 +209,8 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         router_topk = ctx.router_topk
        
         print(f"args={args}")
+
+        
 
         # permute1_graph.backward(args[0])
         ep_group = parallel_state.get_expert_model_parallel_group()
@@ -200,6 +225,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         bw_permute1_ep_all2all_handle.wait()
 
         backward_func(permute1_graph, permute1_backward_input)
+
 
         #print(detach_scores.grad)
 

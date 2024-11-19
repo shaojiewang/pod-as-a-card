@@ -187,6 +187,10 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         (expert_output, mlp_bias), *_ = forward_func(moe_layer.experts, (global_input_tokens, tokens_per_expert))
         save_tensors.append(expert_output)
 
+        expert_output = expert_output.detach()
+        expert_output.require_grad = True
+        save_tensors.append(expert_output)
+
         print(f"permutated_local_input_tokens={permutated_local_input_tokens}")
 
         print(f"global_input_tokens={global_input_tokens}")
@@ -194,7 +198,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
 
-        return global_input_tokens, None 
+        return expert_output, None 
 
     @staticmethod
     def backward(ctx, *args):
@@ -206,6 +210,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
          permute2_input_detach,
          permute2_graph,
          experts_graph,
+         experts_output_detach,
          detach_input,
         ) = ctx.saved_tensors
 
@@ -217,7 +222,10 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
        
         print(f"args={args}")
 
-        backward_func(permute2_graph, args[0])        
+        backward_func(experts_graph, args[0])
+        
+
+        backward_func(permute2_graph, experts_output_detach.grad)        
 
         # permute1_graph.backward(args[0])
         ep_group = parallel_state.get_expert_model_parallel_group()

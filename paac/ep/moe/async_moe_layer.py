@@ -156,12 +156,17 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             True,
         )
 
+        ctx.output_splits = moe_layer.token_dispatcher.output_splits
+        ctx.input_splits = moe_layer.token_dispatcher.input_splits
+        ctx.router_topk = moe_layer.token_dispatcher.router_topk
+
         print(f"permutated_local_input_tokens={permutated_local_input_tokens}")
 
+        permute1_ep_all_to_all_handle.wait()
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
 
-        return permutated_local_input_tokens, None 
+        return global_input_tokens, None 
 
     @staticmethod
     def backward(ctx, *args):
@@ -175,12 +180,26 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         ) = ctx.saved_tensors
 
         ctx.save_for_backward()
+
+        output_splits = ctx.output_splits
+        input_splits = ctx.input_splits
+        router_topk = ctx.router_topk
        
         print(f"args={args}")
 
         # permute1_graph.backward(args[0])
- 
-        backward_func(permute1_graph, args[0])
+        ep_group = parallel_state.get_expert_model_parallel_group()
+        permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(
+            ep_group,
+            args[0],
+            input_splits,
+            output_splits,
+            True,
+        )
+        
+        bw_permute1_ep_all2all_handle.wait()
+
+        backward_func(permute1_graph, permute1_backward_input)
 
         #print(detach_scores.grad)
 

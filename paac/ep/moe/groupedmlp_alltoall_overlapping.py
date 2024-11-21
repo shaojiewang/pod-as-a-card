@@ -49,7 +49,10 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
         act_inputs, mm2_inputs, weights1, weights2, original_weight1, original_weight2, original_weight1, original_weight2, tokens_per_expert = ctx.saved_tensors
         grad_outs = grad_outs[0]
 
-        grad_gmm2_inputs = 
+        grad_gmm2_inputs = backend.gmm(
+                grad, b, batch_sizes, trans_a=False, trans_b=True)
+
+        
 
 
 def grouped_mlp_all2all_overlapping(inputs, weights1, weights2, args, ctx):

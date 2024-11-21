@@ -219,7 +219,41 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         save_tensors_for_grad.append(unpermute1_input_detach)
         unpermute1_input_detach.untyped_storage().resize_(0)
 
-        expert_output = expert_output.detach()
+        # alltoall 
+        permutated_local_input_tokens, unpermute_ep_all_to_all_handle = async_all_to_all(
+            ep_group,
+            expert_output,
+            moe_layer.token_dispatcher.input_splits,
+            moe_layer.token_dispatcher.output_splits,
+            True,
+        )
+
+        unpermute_ep_all_to_all_handle.wait()
+
+        # unpermutation2
+        def alltoall_token_unpermutation2(permutated_local_input_tokens):
+            # Unpermutation 1: AlltoAll output to output
+            output = unpermute(
+                permutated_local_input_tokens,
+                moe_layer.token_dispatcher.reversed_local_input_permutation_mapping,
+                probs=scores,
+            )
+
+            # TODO: add tp support
+            # Perform tensor parallel AlltoAll communication
+            #if not get_args().moe_tp_extend_ep and parallel_state.get_tensor_model_parallel_world_size() > 1:
+                # output: [S*B, H/TP] -> [S*B/TP, H]
+            #    output = tensor_parallel.all_to_all_hp2sp(output)
+
+            # Reshape the output tensor
+            output = output.view(ctx.input_shape)
+            return output
+
+        output, unpermute2_input_detach = forward_func(alltoall_token_unpermutation2, permutated_local_input_tokens)
+        save_tensors.append(unpermute2_input_detach)
+        save_tensors.append(output)
+
+        output = output.detach()
 
         print(f"global_input_tokens shape={global_input_tokens.size()}")
 
@@ -228,7 +262,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
 
-        return expert_output, None 
+        return output, None 
 
     @staticmethod
     def backward(ctx, *args):
@@ -243,6 +277,8 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
          experts_graph,
          unpermute1_input_detach,
          unpermute1_graph,
+         unpermute2_input_detach,
+         unpermute2_graph,
          detach_input,
         ) = ctx.saved_tensors
 

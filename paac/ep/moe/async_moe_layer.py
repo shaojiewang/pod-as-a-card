@@ -287,14 +287,28 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         output_splits = ctx.output_splits
         input_splits = ctx.input_splits
         router_topk = ctx.router_topk
+        ep_group = parallel_state.get_expert_model_parallel_group()
        
         print(f"args[0] shape={args[0].size()}")
-        backward_func(unpermute1_graph, args[0])
+        backward_func(unpermute2_graph, args[0])
+        unpermute2_graph = None
+
+        unpermute1_backward_input, handle = async_all_to_all(
+            ep_group,
+            unpermute2_input_detach.grad,
+            output_splits,
+            input_splits,
+            True,
+        )
+        
+        handle.wait()
+
+
+        backward_func(unpermute1_graph, unpermute1_backward_input)
 
         backward_func(experts_graph, unpermute1_input_detach.grad)
         backward_func(permute2_graph, experts_input_detach.grad)
 
-        ep_group = parallel_state.get_expert_model_parallel_group()
         permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(
             ep_group,
             permute2_input_detach.grad,

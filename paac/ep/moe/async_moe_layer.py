@@ -303,9 +303,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         
         handle.wait()
 
-
         backward_func(unpermute1_graph, unpermute1_backward_input)
-
         backward_func(experts_graph, unpermute1_input_detach.grad)
         backward_func(permute2_graph, experts_input_detach.grad)
 
@@ -321,10 +319,9 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
         backward_func(permute1_graph, permute1_backward_input)
 
+        # print(detach_scores.grad)
 
-        #print(detach_scores.grad)
-
-        # route_graph.backward(detach_scores.grad)
+        route_graph.backward(detach_scores.grad)
         route_graph = None
         grad_output = detach_input.grad
         return grad_output, None

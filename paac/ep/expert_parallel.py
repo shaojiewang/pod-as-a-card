@@ -63,8 +63,8 @@ def __train():
     )
     _set_random_seed(seed_=123, data_parallel_random_init=False)
 
-    num_moe_experts = 64
-    hidden_size = 12
+    num_moe_experts = 32
+    hidden_size = 16
     moe_token_dispatcher_type = "alltoall"
     grouped_gemm = True
 

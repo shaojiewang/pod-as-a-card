@@ -94,6 +94,13 @@ class BaseMoELayer(MegatronModule, ABC):
         self.layer_number = layer_number
         self.router.set_layer_number(layer_number)
 
+grad_in = []
+
+def backward_hook(module, gin, gout):
+    print("backward hook: gin:")
+    print(f"gin shape={gin[0].size()}")
+    grad_in.append(gin)
+    return gin
 
 class MoELayerOverlapAll2All(torch.autograd.Function):
     @staticmethod
@@ -115,6 +122,9 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         save_tensors.append(scores)
 
         # print(f"forward scores={scores}")
+
+        hook = moe_layer.experts.register_full_backward_hook(backward_hook)
+        ctx.expert_hook = hook
 
         save_tensors.append(indices)
 
@@ -183,19 +193,18 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
             
         # routed expert
-        (expert_output, mlp_bias), *_ = forward_func(moe_layer.experts, (global_input_tokens, tokens_per_expert))
-        global_input_tokens_detach = global_input_tokens.detach()
-        global_input_tokens_detach.requires_grad = True
-        save_tensors.append(global_input_tokens_detach)
+        (expert_output, _), expert_input_detached_tuple, _ = forward_func(moe_layer.experts, (global_input_tokens, tokens_per_expert))
+        save_tensors.append(expert_input_detached_tuple)
         save_tensors.append(expert_output)
+        #global_input_tokens_detach.untyped_storage().resize_(0)
+
+        ctx.weight1 = moe_layer.experts.weight1
 
         expert_output = expert_output.detach()
 
-        print(f"permutated_local_input_tokens={permutated_local_input_tokens}")
+        print(f"global_input_tokens shape={global_input_tokens.size()}")
 
-        print(f"global_input_tokens={global_input_tokens}")
-
-        print(f"global_input_tokens_detach={global_input_tokens_detach}")
+        print(f"expert out shape={expert_output.size()}")
 
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
@@ -222,11 +231,13 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         input_splits = ctx.input_splits
         router_topk = ctx.router_topk
        
-        print(f"args={args}")
+        print(f"args[0] shape={args[0].size()}")
 
         backward_func(experts_graph, args[0])
-       
+
+        print(f"grad_in shape={grad_in[0][0].size()}, {grad_in[0][1].size()}")
         print(f"experts_input_detach.grad={experts_input_detach.grad}") 
+        print(f"experts_input_detach shape={experts_input_detach.size()}") 
 
         backward_func(permute2_graph, experts_input_detach.grad)        
         #backward_func(permute2_graph, args[0])        

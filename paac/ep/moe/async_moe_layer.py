@@ -123,8 +123,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
         # print(f"forward scores={scores}")
 
-        hook = moe_layer.experts.register_full_backward_hook(backward_hook)
-        ctx.expert_hook = hook
+        # hook = moe_layer.experts.register_full_backward_hook(backward_hook)
 
         save_tensors.append(indices)
 
@@ -191,14 +190,34 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             save_tensors_for_grad.append(global_input_tokens_detach)
             global_input_tokens_detach.untyped_storage().resize_(0)
 
-            
         # routed expert
-        (expert_output, _), expert_input_detached_tuple, _ = forward_func(moe_layer.experts, (global_input_tokens, tokens_per_expert))
-        save_tensors.append(expert_input_detached_tuple)
+        (expert_output, _), expert_input_detached, _ = forward_func(moe_layer.experts, (global_input_tokens, tokens_per_expert))
+        save_tensors.append(expert_input_detached)
         save_tensors.append(expert_output)
-        #global_input_tokens_detach.untyped_storage().resize_(0)
 
-        ctx.weight1 = moe_layer.experts.weight1
+        # unpermutation
+        def alltoall_token_unpermutation1(hidden_states):
+            # assert bias is None, "Bias is not supported in MoEAlltoAllTokenDispatcher"
+
+            # TODO: test tp case
+            # Perform tensor parallel Reduce-Scatter
+            # hidden_states: [SEQL, H] -> [SEQL, H/TP]
+            # if not get_args().moe_tp_extend_ep and parallel_state.get_tensor_model_parallel_world_size() > 1:
+            #    hidden_states = tensor_parallel.reduce_scatter_last_dim_to_tensor_parallel_region(hidden_states)
+
+            # Unpermutation 2: expert output to AlltoAll input
+            # hidden_states: [SEQL, H] -> [SEQL, H/TP]
+            if moe_layer.token_dispatcher.num_local_experts > 1:
+                hidden_states = unpermute(
+                    hidden_states, moe_layer.token_dispatcher.reversed_global_input_permutation_mapping
+                )
+            return hidden_states
+
+        expert_output, unpermute1_input_detach = forward_func(alltoall_token_unpermutation1, expert_output)
+        save_tensors.append(unpermute1_input_detach)
+        save_tensors.append(expert_output)
+        save_tensors_for_grad.append(unpermute1_input_detach)
+        unpermute1_input_detach.untyped_storage().resize_(0)
 
         expert_output = expert_output.detach()
 
@@ -222,6 +241,8 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
          permute2_graph,
          experts_input_detach,
          experts_graph,
+         unpermute1_input_detach,
+         unpermute1_graph,
          detach_input,
         ) = ctx.saved_tensors
 
@@ -232,17 +253,11 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         router_topk = ctx.router_topk
        
         print(f"args[0] shape={args[0].size()}")
+        backward_func(unpermute1_graph, args[0])
 
-        backward_func(experts_graph, args[0])
+        backward_func(experts_graph, unpermute1_input_detach.grad)
+        backward_func(permute2_graph, experts_input_detach.grad)
 
-        print(f"grad_in shape={grad_in[0][0].size()}, {grad_in[0][1].size()}")
-        print(f"experts_input_detach.grad={experts_input_detach.grad}") 
-        print(f"experts_input_detach shape={experts_input_detach.size()}") 
-
-        backward_func(permute2_graph, experts_input_detach.grad)        
-        #backward_func(permute2_graph, args[0])        
-
-        # permute1_graph.backward(args[0])
         ep_group = parallel_state.get_expert_model_parallel_group()
         permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(
             ep_group,

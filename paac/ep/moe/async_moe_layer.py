@@ -230,6 +230,10 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             True,
         )
 
+        # run shared expert here
+        if moe_layer.use_shared_expert:
+            ctx.shared_experts = moe_layer.shared_experts
+
         unpermute_ep_all_to_all_handle.wait()
 
         # unpermutation2
@@ -352,7 +356,7 @@ class AsyncMoELayer(BaseMoELayer):
         super(AsyncMoELayer, self).__init__(config=config, layer_number=layer_number)
         self.moe_layer_recompute = config.moe_layer_recompute
 
-        self.use_shared_expert = False # config.enable_shared_expert
+        self.use_shared_expert = config.enable_shared_expert
 
         # Initialize router
         self.router = TopKRouter(config=self.config)

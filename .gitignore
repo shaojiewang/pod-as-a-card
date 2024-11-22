@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# nsys
+*.nsys-rep
+*.sqlite
+
 # Distribution / packaging
 .Python
 build/

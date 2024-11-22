@@ -32,13 +32,13 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
     @staticmethod
     def forward(ctx, inputs, weights1, weights2, args, moe_layer_ctx):
         original_weight1, original_weight2, activation_func, tokens_per_expert, layer_number = args
-        fc1_output = ops.gmm(
-            inputs, weight1, tokens_per_expert, trans_b=False
+        fc1_output = backend.gmm(
+            inputs, weight1, tokens_per_expert, trans_a=False, trans_b=False
         )
 
         act_out, detached_act_inputs = forward_func(activation_func, fc1_output)
 
-        fc2_output = ops.gmm(act_out, weight2, tokens_per_expert, trans_b=False)
+        fc2_output = backend.gmm(act_out, weight2, tokens_per_expert, trans_a=False, trans_b=False)
 
         ctx.save_for_backward(detached_act_inputs, act_out, weights1, weights2, original_weight1, original_weight2, tokens_per_expert)
         
@@ -50,10 +50,12 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
         grad_outs = grad_outs[0]
 
         grad_gmm2_inputs = backend.gmm(
-                grad, b, batch_sizes, trans_a=False, trans_b=True)
+                grad_outs, weight2, batch_sizes, trans_a=False, trans_b=True)
+
+        grad_weight2
 
         
 
-
 def grouped_mlp_all2all_overlapping(inputs, weights1, weights2, args, ctx):
     return GroupedMlpAlltoallOverlapping.apply(inputs, weights1, weights2, args, ctx)
+

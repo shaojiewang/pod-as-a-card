@@ -12,6 +12,8 @@ import struct
 import argparse
 import warnings
 
+import nvtx
+
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -64,7 +66,7 @@ def __train():
     _set_random_seed(seed_=123, data_parallel_random_init=False)
 
     num_moe_experts = 32
-    hidden_size = 16
+    hidden_size = 1536
     moe_token_dispatcher_type = "alltoall"
     grouped_gemm = True
 
@@ -100,7 +102,7 @@ def __train():
 
     moe_layer.cuda()
     # [sequence length, batch size, hidden size]
-    seq_len = 32
+    seq_len = 4096
     batch_size = 2
     hidden_states = torch.rand(
         (seq_len, batch_size, hidden_size),
@@ -112,8 +114,12 @@ def __train():
 
     moe_layer_ = moe_layer.bfloat16()
 
-    output_smm, _ = moe_layer_(hidden_states)
-    output_smm.mean().backward()
+    for i in range(20):
+        with nvtx.annotate(f"iteration{i}", color="red"):
+            with nvtx.annotate(f"forward", color="green"):
+                output_smm, _ = moe_layer_(hidden_states)
+            with nvtx.annotate(f"backward", color="blue"):
+                output_smm.mean().backward()
 
 
     Utils.destroy_model_parallel()

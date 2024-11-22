@@ -45,6 +45,8 @@ except ImportError:
 
     HAVE_TE = False
 
+from .groupedmlp_alltoall_overlapping import grouped_mlp_all2all_overlapping
+
 
 class GroupedMLP(MegatronModule):
     """An efficient implementation of the Experts layer using GroupedGEMM.
@@ -184,6 +186,10 @@ class GroupedMLP(MegatronModule):
             print("group mlp")
 
             print(f"gmm input shape={permuted_local_hidden_states.size()}")
+
+            return grouped_mlp_all2all_overlapping(permuted_local_hidden_states, w1, w2, 
+                (self.weight1, self.weight2, self.activation_func, tokens_per_expert, None),
+                None)
 
             fc1_output = gg.ops.gmm(
                 permuted_local_hidden_states, w1, tokens_per_expert, trans_b=False

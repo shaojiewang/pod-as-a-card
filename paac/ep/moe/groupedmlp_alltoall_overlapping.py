@@ -26,34 +26,56 @@ def assert_grouped_gemm_is_available():
 
 ops = grouped_gemm.ops if grouped_gemm_is_available() else None
 
-backend = grouped_gemm.backedn if grouped_gemm_is_available() else None
+backend = grouped_gemm.backend if grouped_gemm_is_available() else None
 
 class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
     @staticmethod
     def forward(ctx, inputs, weights1, weights2, args, moe_layer_ctx):
         original_weight1, original_weight2, activation_func, tokens_per_expert, layer_number = args
         fc1_output = backend.gmm(
-            inputs, weight1, tokens_per_expert, trans_a=False, trans_b=False
+            inputs, weights1, tokens_per_expert, trans_a=False, trans_b=False
         )
 
         act_out, detached_act_inputs = forward_func(activation_func, fc1_output)
 
-        fc2_output = backend.gmm(act_out, weight2, tokens_per_expert, trans_a=False, trans_b=False)
+        fc2_output = backend.gmm(act_out, weights2, tokens_per_expert, trans_a=False, trans_b=False)
 
-        ctx.save_for_backward(detached_act_inputs, act_out, weights1, weights2, original_weight1, original_weight2, tokens_per_expert)
+        ctx.save_for_backward(inputs, detached_act_inputs, act_out, weights1, weights2, original_weight1, original_weight2, tokens_per_expert)
         
-        return fc2_output, _
+        return fc2_output, None
     
     @staticmethod
     def backward(ctx, *grad_outs):
-        act_inputs, mm2_inputs, weights1, weights2, original_weight1, original_weight2, original_weight1, original_weight2, tokens_per_expert = ctx.saved_tensors
+        inputs, act_inputs, mm2_inputs, weights1, weights2, original_weight1, original_weight2, tokens_per_expert = ctx.saved_tensors
         grad_outs = grad_outs[0]
 
         grad_gmm2_inputs = backend.gmm(
-                grad_outs, weight2, batch_sizes, trans_a=False, trans_b=True)
+            grad_outs, weights2, tokens_per_expert, trans_a=False, trans_b=True
+        )
 
-        grad_weight2
+        grad_weight2 = backend.gmm(
+            mm2_inputs, grad_outs, tokens_per_expert, trans_a=True, trans_b=False
+        )
 
+
+        act_graph = mm2_inputs
+        # grad of activation_func
+        grad_outs.untyped_storage().resize_(0)
+        # mm2_inputs.untyped_storage().resize_(0)
+
+        act_graph.backward(grad_gmm2_inputs)
+        grad_gmm2_inputs.untyped_storage().resize_(0)
+        act_inputs.untyped_storage().resize_(0)
+
+        mm1_inputs_grad = backend.gmm(
+            act_inputs.grad, weights1, tokens_per_expert, trans_a=False, trans_b=True
+        )
+
+        grad_weight1 = backend.gmm(
+            inputs, act_inputs.grad, tokens_per_expert, trans_a=True, trans_b=False
+        )
+
+        return mm1_inputs_grad, grad_weight1, grad_weight2, None, None
         
 
 def grouped_mlp_all2all_overlapping(inputs, weights1, weights2, args, ctx):

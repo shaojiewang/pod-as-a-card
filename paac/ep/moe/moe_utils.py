@@ -2,6 +2,31 @@ import torch
 from megatron.training import get_args
 from megatron.core import mpu
 
+GMM_BWD_TENSORS_NEEDED = None
+LL2ALL_EXPERTS_OUTPUT = None
+
+def set_gemm_backward_need_tensors(_inputs):
+    global GEMM_BACKWARD_NEED_TENSORS
+    GEMM_BACKWARD_NEED_TENSORS = _inputs
+
+
+def get_gemm_backward_need_tensors():
+    global GEMM_BACKWARD_NEED_TENSORS
+    result = GEMM_BACKWARD_NEED_TENSORS
+    GEMM_BACKWARD_NEED_TENSORS = None
+    return result
+
+def set_all2all_experts_output(_input):
+    global ALL2ALL_EXPERTS_OUTPUT
+    ALL2ALL_EXPERTS_OUTPUT = _input
+
+
+def get_all2all_experts_output():
+    global ALL2ALL_EXPERTS_OUTPUT
+    result = ALL2ALL_EXPERTS_OUTPUT
+    ALL2ALL_EXPERTS_OUTPUT = None
+    return result
+
 
 def sort_chunks_by_idxs(input: torch.Tensor, split_sizes: torch.Tensor, sorted_idxs: torch.Tensor):
     """Split and sort the input tensor based on the split_sizes and sorted indices."""

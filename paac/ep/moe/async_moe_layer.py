@@ -28,6 +28,8 @@ from .moe_utils import (
     forward_func, 
     backward_func,
     sort_chunks_by_idxs,
+    set_gemm_backward_need_tensors,
+    get_all2all_experts_output,
 )
 from megatron.core.transformer.moe.moe_utils import (
     get_capacity,
@@ -288,6 +290,14 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         input_splits = ctx.input_splits
         router_topk = ctx.router_topk
         ep_group = parallel_state.get_expert_model_parallel_group()
+
+        set_gemm_backward_need_tensors(
+            (ep_group,
+            permute2_input_detach, 
+            permute2_graph,
+            output_splits,
+            input_splits,)
+        )
        
         print(f"args[0] shape={args[0].size()}")
         backward_func(unpermute2_graph, args[0])
@@ -305,17 +315,19 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
         backward_func(unpermute1_graph, unpermute1_backward_input)
         backward_func(experts_graph, unpermute1_input_detach.grad)
-        backward_func(permute2_graph, experts_input_detach.grad)
+        # backward_func(permute2_graph, experts_input_detach.grad)
 
-        permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(
-            ep_group,
-            permute2_input_detach.grad,
-            input_splits,
-            output_splits,
-            True,
-        )
+        #permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(
+        #    ep_group,
+        #    permute2_input_detach.grad,
+        #    input_splits,
+        #    output_splits,
+        #    True,
+        #)
         
-        bw_permute1_ep_all2all_handle.wait()
+        #bw_permute1_ep_all2all_handle.wait()
+
+        (permute1_backward_input) = get_all2all_experts_output()
 
         backward_func(permute1_graph, permute1_backward_input)
 

@@ -3,6 +3,12 @@ import torch
 from .moe_utils import (
     forward_func, 
     backward_func,
+    get_gemm_backward_need_tensors,
+    set_all2all_experts_output,
+)
+
+from .ccl_utils import (
+    async_all_to_all,
 )
 
 try:
@@ -49,6 +55,8 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
         inputs, act_inputs, mm2_inputs, weights1, weights2, original_weight1, original_weight2, tokens_per_expert = ctx.saved_tensors
         grad_outs = grad_outs[0]
 
+        (ep_group, permute2_input_detach, permute2_graph, output_splits, input_splits) = get_gemm_backward_need_tensors()
+
         grad_gmm2_inputs = backend.gmm(
             grad_outs, weights2, tokens_per_expert, trans_a=False, trans_b=True
         )
@@ -71,9 +79,25 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
             act_inputs.grad, weights1, tokens_per_expert, trans_a=False, trans_b=True
         )
 
+        backward_func(permute2_graph, mm1_inputs_grad)
+
+        #TODO: add tp
+
+        permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(
+            ep_group,
+            permute2_input_detach.grad,
+            input_splits,
+            output_splits,
+            True,
+        )        
+
         grad_weight1 = backend.gmm(
             inputs, act_inputs.grad, tokens_per_expert, trans_a=True, trans_b=False
         )
+
+        bw_permute1_ep_all2all_handle.wait()
+
+        set_all2all_experts_output((permute1_backward_input))
 
         return mm1_inputs_grad, grad_weight1, grad_weight2, None, None
         

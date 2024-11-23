@@ -30,6 +30,7 @@ from moe.gpt_layer_specs import (
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
 )
+from moe.transformer_config import MoETransformerConfig
 
 def __train():
     if "OMPI_COMM_WORLD_SIZE" in os.environ:
@@ -66,17 +67,23 @@ def __train():
     _set_random_seed(seed_=123, data_parallel_random_init=False)
 
     num_moe_experts = 32
+    enable_shared_expert = True
+    num_shared_experts = 2
     hidden_size = 1536
+    moe_shared_expert_intermediate_size = num_shared_experts * hidden_size
     moe_token_dispatcher_type = "alltoall"
     grouped_gemm = True
 
-    transformer_config = TransformerConfig(
+    transformer_config = MoETransformerConfig(
         tensor_model_parallel_size=tp_size,
         expert_model_parallel_size=ep_size,
         num_layers=1,
         hidden_size=hidden_size,
         num_attention_heads=4,
         num_moe_experts=num_moe_experts,
+        enable_shared_expert=enable_shared_expert,
+        num_shared_experts=num_shared_experts,
+        moe_shared_expert_intermediate_size=moe_shared_expert_intermediate_size,
         use_cpu_initialization=True,
         moe_token_dispatcher_type=moe_token_dispatcher_type,
         moe_router_topk=6,

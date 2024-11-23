@@ -21,11 +21,12 @@ from megatron.core.tensor_parallel.random import (
     get_cuda_rng_tracker,
     get_data_parallel_rng_tracker_name,
 )
-from megatron.core.transformer.mlp import MLP
+# from megatron.core.transformer.mlp import MLP
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import make_sharded_tensor_for_checkpoint
 
+from .mlp import MLP
 
 class SharedExpertMLP(MLP):
     """
@@ -90,6 +91,7 @@ class SharedExpertMLP(MLP):
     def forward(self, hidden_states):
         """Forward function"""
         output, _ = super().forward(hidden_states)
+        print("shared expert forward")
         if self.use_shared_expert_gate:
             logits = torch.nn.functional.linear(hidden_states, self.gate_weight)
             gate_score = torch.nn.functional.sigmoid(logits)

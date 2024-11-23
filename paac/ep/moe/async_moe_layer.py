@@ -233,6 +233,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         # run shared expert here
         if moe_layer.use_shared_expert:
             ctx.shared_experts = moe_layer.shared_experts
+            share_experts_output, *_ = forward_func(moe_layer.shared_experts, (hidden_states))
 
         unpermute_ep_all_to_all_handle.wait()
 

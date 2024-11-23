@@ -295,7 +295,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
          unpermute1_graph,
          unpermute2_input_detach,
          unpermute2_graph,
-         shared_experts_gragh,
+         shared_experts_graph,
          detach_input,
         ) = ctx.saved_tensors
 
@@ -317,7 +317,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         print(f"args[0] shape={args[0].size()}")
         if ctx.use_shared_expert:
             #TODO: add shared tp
-            backward_shared = args[0]
+            backward_ag_shared = args[0]
 
         backward_func(unpermute2_graph, args[0])
         unpermute2_graph = None
@@ -329,6 +329,11 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             input_splits,
             True,
         )
+
+        if ctx.use_shared_expert:
+            #TODO:support shared tp
+            shared_experts_graph.backward(backward_ag_shared)
+            shared_experts_graph = None
         
         handle.wait()
 

@@ -129,6 +129,8 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
         save_tensors.append(indices)
 
+        ctx.use_shared_expert = moe_layer.use_shared_expert
+
         if moe_layer.use_shared_expert:
             ctx.shared_experts = moe_layer.shared_experts
             #TODO: support TP here
@@ -234,6 +236,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         if moe_layer.use_shared_expert:
             ctx.shared_experts = moe_layer.shared_experts
             share_experts_output, *_ = forward_func(moe_layer.shared_experts, (hidden_states))
+            #TODO: support tp
 
         unpermute_ep_all_to_all_handle.wait()
 
@@ -259,8 +262,14 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         output, unpermute2_input_detach = forward_func(alltoall_token_unpermutation2, permutated_local_input_tokens)
         save_tensors.append(unpermute2_input_detach)
         save_tensors.append(output)
-
-        output = output.detach()
+        save_tensors.append(share_experts_output)
+        
+        # sum of shared
+        if moe_layer.use_shared_expert:
+            output_sum = output + share_experts_output
+            
+        else:
+            output_sum = output.detach()
 
         print(f"global_input_tokens shape={global_input_tokens.size()}")
 
@@ -269,7 +278,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
 
-        return output, None 
+        return output_sum, None 
 
     @staticmethod
     def backward(ctx, *args):
@@ -286,6 +295,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
          unpermute1_graph,
          unpermute2_input_detach,
          unpermute2_graph,
+         shared_experts_gragh,
          detach_input,
         ) = ctx.saved_tensors
 
@@ -305,6 +315,10 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         )
        
         print(f"args[0] shape={args[0].size()}")
+        if ctx.use_shared_expert:
+            #TODO: add shared tp
+            backward_shared = args[0]
+
         backward_func(unpermute2_graph, args[0])
         unpermute2_graph = None
 

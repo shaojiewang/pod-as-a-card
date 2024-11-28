@@ -32,8 +32,8 @@ from moe.gpt_layer_specs import (
 )
 from moe.transformer_config import MoETransformerConfig
 
-class MoEModel():
-    def __init__():
+class MoEModel:
+    def __init__(self):
         if "OMPI_COMM_WORLD_SIZE" in os.environ:
             # Execution with `mpirun -np N`
             WORLD_RANK = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
@@ -74,6 +74,8 @@ class MoEModel():
         moe_token_dispatcher_type = "alltoall"
         grouped_gemm = True
 
+        self.hidden_size = hidden_size
+
         self.transformer_config = MoETransformerConfig(
             tensor_model_parallel_size=tp_size,
             expert_model_parallel_size=ep_size,
@@ -109,12 +111,12 @@ class MoEModel():
 
         self.moe_layer.cuda()
         
-    def run_fwd_bwd():
+    def run_fwd_bwd(self):
         # [sequence length, batch size, hidden size]
         seq_len = 4096
         batch_size = 2
         hidden_states = torch.rand(
-            (seq_len, batch_size, hidden_size),
+            (seq_len, batch_size, self.hidden_size),
             dtype=torch.bfloat16,
             device="cuda",
             requires_grad=True,
@@ -134,5 +136,5 @@ class MoEModel():
 
 if __name__ == "__main__":
     moe_layer_test = MoEModel()
-    moe_layer_test.train()
+    moe_layer_test.run_fwd_bwd()
 

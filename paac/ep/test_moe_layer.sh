@@ -12,8 +12,15 @@ export NCCL_NVLS_ENABLE=0
 export NCCL_IB_DISABLE=0
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
+TP=$1
+PP=$2
+EP=$3
+CP=$4
+
+NPROC_PER_NODE=$(( ${TP} * ${PP} * ${EP} * ${CP} ))
+
 export MEGATRON_PATH=/share/wangshaojie05/pai-megatron-patch-internal/
 export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/PAI-Megatron-LM-240718
-torchrun --nnodes=1 --nproc-per-node=2 \
+torchrun --nnodes=1 --nproc-per-node=${NPROC_PER_NODE} \
     expert_parallel.py
 

@@ -64,7 +64,8 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
         grad_weight2 = backend.gmm(
             mm2_inputs, grad_outs, tokens_per_expert, trans_a=True, trans_b=False
         )
-
+        
+        print(f"ctx.gradient_accumulation_fusion={ctx.gradient_accumulation_fusion}")
 
         act_graph = mm2_inputs
         # grad of activation_func

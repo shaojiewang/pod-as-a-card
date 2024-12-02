@@ -1,5 +1,7 @@
 import torch
 
+from megatron.training import get_args
+
 from .moe_utils import (
     forward_func, 
     backward_func,
@@ -65,7 +67,9 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
             mm2_inputs, grad_outs, tokens_per_expert, trans_a=True, trans_b=False
         )
         
-        print(f"ctx.gradient_accumulation_fusion={ctx.gradient_accumulation_fusion}")
+        # print(f"ctx.gradient_accumulation_fusion={ctx.gradient_accumulation_fusion}")
+        # print(f"get_args().gemm_gradient_accumulation_fusion={get_args().gemm_gradient_accumulation_fusion}")
+        print(f"original_weight1.main_grad={original_weight1.main_grad}")
 
         act_graph = mm2_inputs
         # grad of activation_func

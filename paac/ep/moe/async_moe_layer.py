@@ -123,6 +123,8 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         scores.requires_grad = True
         save_tensors.append(scores)
 
+        print(f"gradient_accumulation_fusion={moe_layer.config.gradient_accumulation_fusion}")
+
         # print(f"forward scores={scores}")
 
         # hook = moe_layer.experts.register_full_backward_hook(backward_hook)

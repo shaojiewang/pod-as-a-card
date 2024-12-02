@@ -18,6 +18,7 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel
+from torch.optim import SGD, Adam
 
 from megatron.core.transformer.moe.moe_layer import MoELayer
 from megatron.core.transformer.moe.router import Router
@@ -31,6 +32,7 @@ from moe.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
 from moe.transformer_config import MoETransformerConfig
+
 
 class MoEModel:
     def __init__(self):
@@ -74,6 +76,8 @@ class MoEModel:
         moe_token_dispatcher_type = "alltoall"
         grouped_gemm = True
 
+        grad_accumulation_fusion = True
+
         self.hidden_size = hidden_size
 
         self.transformer_config = MoETransformerConfig(
@@ -97,6 +101,7 @@ class MoEModel:
             activation_func=torch.nn.functional.silu,
             gated_linear_unit=True,
             bias_activation_fusion=True,
+            gradient_accumulation_fusion=grad_accumulation_fusion,
         )
         
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
@@ -110,6 +115,8 @@ class MoEModel:
         )
 
         self.moe_layer.cuda()
+        self.moe_layer_ = self.moe_layer.bfloat16()
+        self.optimizer = Adam(list(self.moe_layer_.parameters())[:2], lr=0.01)
         
     def run_fwd_bwd(self):
         # [sequence length, batch size, hidden size]
@@ -123,14 +130,14 @@ class MoEModel:
         )
         hidden_states.retain_grad()
 
-        moe_layer_ = self.moe_layer.bfloat16()
-
         for i in range(20):
             with nvtx.annotate(f"iteration{i}", color="red"):
                 with nvtx.annotate(f"forward", color="green"):
-                    output_smm, _ = moe_layer_(hidden_states)
+                    output_smm, _ = self.moe_layer_(hidden_states)
                 with nvtx.annotate(f"backward", color="blue"):
                     output_smm.mean().backward()
+                with nvtx.annotate(f"optimizer", color="orange"):
+                    self.optimizer.step()
 
         Utils.destroy_model_parallel()
 

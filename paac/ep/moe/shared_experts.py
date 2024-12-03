@@ -91,7 +91,6 @@ class SharedExpertMLP(MLP):
     def forward(self, hidden_states):
         """Forward function"""
         output, _ = super().forward(hidden_states)
-        print("shared expert forward")
         if self.use_shared_expert_gate:
             logits = torch.nn.functional.linear(hidden_states, self.gate_weight)
             gate_score = torch.nn.functional.sigmoid(logits)

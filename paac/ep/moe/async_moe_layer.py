@@ -99,8 +99,6 @@ class BaseMoELayer(MegatronModule, ABC):
 grad_in = []
 
 def backward_hook(module, gin, gout):
-    print("backward hook: gin:")
-    print(f"gin shape={gin[0].size()}")
     grad_in.append(gin)
     return gin
 
@@ -271,9 +269,9 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         else:
             output_sum = output.detach()
 
-        print(f"global_input_tokens shape={global_input_tokens.size()}")
+        #print(f"global_input_tokens shape={global_input_tokens.size()}")
 
-        print(f"expert out shape={expert_output.size()}")
+        #print(f"expert out shape={expert_output.size()}")
 
         save_tensors.append(hidden_states)
         ctx.save_for_backward(*save_tensors)
@@ -314,7 +312,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             input_splits,)
         )
        
-        print(f"args[0] shape={args[0].size()}")
+        # print(f"args[0] shape={args[0].size()}")
         if ctx.use_shared_expert:
             #TODO: add shared tp
             backward_ag_shared = args[0]
@@ -355,11 +353,12 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
         backward_func(permute1_graph, permute1_backward_input)
 
-        # print(detach_scores.grad)
+        print(f"detach_scores.grad={detach_scores.grad}")
 
         route_graph.backward(detach_scores.grad)
         route_graph = None
         grad_output = detach_input.grad
+        print(f"detach_input.grad={grad_output}")
         return grad_output, None
 
 class AsyncMoELayer(BaseMoELayer):

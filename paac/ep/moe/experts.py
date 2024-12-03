@@ -183,10 +183,6 @@ class GroupedMLP(MegatronModule):
             w1 = self.weight1.view(self.num_local_experts, self.config.hidden_size, -1)
             w2 = self.weight2.view(self.num_local_experts, -1, self.config.hidden_size)
 
-            print("group mlp")
-
-            print(f"gmm input shape={permuted_local_hidden_states.size()}")
-
             return grouped_mlp_all2all_overlapping(permuted_local_hidden_states, w1, w2, 
                 (self.weight1, self.weight2, self.activation_func, tokens_per_expert, None),
                 None)

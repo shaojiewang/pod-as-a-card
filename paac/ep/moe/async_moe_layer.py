@@ -251,7 +251,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
                 permutated_local_input_tokens,
                 moe_layer.token_dispatcher.reversed_local_input_permutation_mapping,
                 probs=scores,
-                unpermute_fusion=False,
+                unpermute_fusion=True,
             )
 
             # TODO: add tp support
@@ -360,12 +360,9 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
         backward_func(permute1_graph, permute1_backward_input)
 
-        print(f"detach_scores.grad={detach_scores.grad}")
-
         route_graph.backward(detach_scores.grad)
         route_graph = None
         grad_output = detach_input.grad
-        print(f"detach_input.grad={grad_output}")
         return grad_output, None
 
 class AsyncMoELayer(BaseMoELayer):

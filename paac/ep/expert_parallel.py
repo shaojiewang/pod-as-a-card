@@ -125,7 +125,7 @@ class MoEModel:
 
         moe_layer_ = self.moe_layer.bfloat16()
 
-        for i in range(1):
+        for i in range(20):
             with nvtx.annotate(f"iteration{i}", color="red"):
                 with nvtx.annotate(f"forward", color="green"):
                     output_smm, _ = moe_layer_(hidden_states)

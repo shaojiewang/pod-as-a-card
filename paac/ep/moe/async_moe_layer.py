@@ -30,11 +30,11 @@ from .moe_utils import (
     sort_chunks_by_idxs,
     set_gemm_backward_need_tensors,
     get_all2all_experts_output,
+    permute,
+    unpermute,
 )
 from megatron.core.transformer.moe.moe_utils import (
     get_capacity,
-    permute,
-    unpermute,
 )
 
 from .ccl_utils import (
@@ -144,7 +144,9 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             # Permutation 1: input to AlltoAll input
             moe_layer.token_dispatcher.local_input_tokens_global_experts_indices = indices
             permutated_local_input_tokens, moe_layer.token_dispatcher.reversed_local_input_permutation_mapping = permute(
-                hidden_states, moe_layer.token_dispatcher.local_input_tokens_global_experts_indices, 
+                hidden_states, 
+                moe_layer.token_dispatcher.local_input_tokens_global_experts_indices, 
+                permute_fusion=False,
             )
             return tokens_per_expert, permutated_local_input_tokens
 
@@ -177,7 +179,9 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         if moe_layer.num_local_experts > 1:
             def alltoall_token_permutation2(global_input_tokens):
                 global_input_tokens, moe_layer.token_dispatcher.reversed_global_input_permutation_mapping = permute(
-                    global_input_tokens, moe_layer.token_dispatcher.global_input_tokens_local_experts_indices
+                    global_input_tokens, 
+                    moe_layer.token_dispatcher.global_input_tokens_local_experts_indices,
+                    permute_fusion=False,
                 )
 
                 # TODO: add TP support here
@@ -211,7 +215,9 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             # hidden_states: [SEQL, H] -> [SEQL, H/TP]
             if moe_layer.token_dispatcher.num_local_experts > 1:
                 hidden_states = unpermute(
-                    hidden_states, moe_layer.token_dispatcher.reversed_global_input_permutation_mapping
+                    hidden_states, 
+                    moe_layer.token_dispatcher.reversed_global_input_permutation_mapping,
+                    unpermute_fusion=False,
                 )
             return hidden_states
 
@@ -245,6 +251,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
                 permutated_local_input_tokens,
                 moe_layer.token_dispatcher.reversed_local_input_permutation_mapping,
                 probs=scores,
+                unpermute_fusion=False,
             )
 
             # TODO: add tp support

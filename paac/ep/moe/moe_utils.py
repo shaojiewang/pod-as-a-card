@@ -2,6 +2,87 @@ import torch
 from megatron.training import get_args
 from megatron.core import mpu
 
+from pkg_resources import packaging
+
+from megatron.core.transformer.custom_layers.transformer_engine import _te_version
+import transformer_engine as te
+import logging
+
+logger = logging.getLogger(__name__)
+
+if _te_version >= packaging.version.Version("1.11.0.dev0"):
+    fused_permute = te.pytorch.permutation.moe_permute
+    fused_unpermute = te.pytorch.permutation.moe_unpermute
+else:
+    logger.warning(f"Dispatcher permute fusion depends on _te_version > 1.11.0, current version is {_te_version}, \
+                   try upgrading your transformer_engine version")
+    fused_permute = None
+    fused_unpermute = None
+
+def permute(tokens, indices, permute_fusion: bool = False):
+    """Permute the tokens based on the indices. Token with the same index will be grouped together.
+
+    Args:
+        tokens (torch.Tensor): The input token tensor.
+        indices (torch.Tensor): The token to expert indices tensor, should have a shape of [num_tokens, topk].
+        topk (int, optional): The topk value. Defaults to 1.
+
+    Returns:
+        torch.Tensor: The permuted tensor.
+    """
+    if indices.dim() == 1:
+        indices = indices.unsqueeze(1)
+    if permute_fusion and fused_permute is not None:
+        permuted_tokens, sorted_indices = fused_permute(
+            tokens, indices, -1
+        )
+        return permuted_tokens, sorted_indices
+    
+    topk = indices.size(1)
+    flatten_indices = indices.view(-1)
+    sorted_indices = torch.argsort(flatten_indices, stable=True)
+    permuted_tokens = tokens.index_select(0, sorted_indices // topk)
+    return permuted_tokens, sorted_indices
+
+
+def unpermute(permuted_tokens, 
+              sorted_indices, 
+              probs: torch.Tensor = None, 
+              unpermute_fusion: bool = False
+            ):
+    """Unpermute a tensor of permuted tokens based on sorted indices, and optionally merge the tokens with their corresponding probabilities.
+
+    Args:
+        permuted_tokens (torch.Tensor): The tensor of permuted tokens to be unpermuted.
+        sorted_indices (torch.Tensor): The tensor of sorted indices used to unpermute the tokens.
+        probs (torch.Tensor, optional): The tensor of probabilities corresponding to the permuted tokens. If provided, the unpermuted tokens will be merged with their respective probabilities.
+        topk (int, optional): The number of top tokens to consider for merging with probabilities. Defaults to 1.
+    """
+    assert sorted_indices.numel() == permuted_tokens.size(0)
+    
+    if unpermute_fusion and fused_unpermute is not None:
+      unpermuted_tokens = fused_unpermute(permuted_tokens, sorted_indices, probs)
+      return unpermuted_tokens
+
+    if probs is not None:
+        # Unpermute and merge the tokens with their probabilities
+        topk = probs.size(1)
+    else:
+        # Unpermute the tokens without merge
+        topk = 1
+    
+    unpermuted_tokens = torch.zeros_like(permuted_tokens)
+    unpermuted_tokens.index_copy_(0, sorted_indices, permuted_tokens)
+
+    unpermuted_tokens = unpermuted_tokens.reshape(-1, topk, permuted_tokens.size(-1))
+
+    if probs is not None:
+        unpermuted_tokens = unpermuted_tokens * probs.unsqueeze(-1)
+
+    unpermuted_tokens = unpermuted_tokens.sum(dim=1)
+
+    return unpermuted_tokens
+
 GMM_BWD_TENSORS_NEEDED = None
 LL2ALL_EXPERTS_OUTPUT = None
 

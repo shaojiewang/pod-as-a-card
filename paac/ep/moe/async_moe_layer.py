@@ -146,7 +146,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             permutated_local_input_tokens, moe_layer.token_dispatcher.reversed_local_input_permutation_mapping = permute(
                 hidden_states, 
                 moe_layer.token_dispatcher.local_input_tokens_global_experts_indices, 
-                permute_fusion=False,
+                permute_fusion=True,
             )
             return tokens_per_expert, permutated_local_input_tokens
 
@@ -213,12 +213,12 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
 
             # Unpermutation 2: expert output to AlltoAll input
             # hidden_states: [SEQL, H] -> [SEQL, H/TP]
-            if moe_layer.token_dispatcher.num_local_experts > 1:
-                hidden_states = unpermute(
-                    hidden_states, 
-                    moe_layer.token_dispatcher.reversed_global_input_permutation_mapping,
-                    unpermute_fusion=False,
-                )
+            #if moe_layer.token_dispatcher.num_local_experts > 1:
+            hidden_states = unpermute(
+                hidden_states, 
+                moe_layer.token_dispatcher.reversed_global_input_permutation_mapping,
+                unpermute_fusion=False,
+            )
             return hidden_states
 
         expert_output, unpermute1_input_detach = forward_func(alltoall_token_unpermutation1, expert_output)

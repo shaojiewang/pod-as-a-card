@@ -84,7 +84,7 @@ def unpermute(permuted_tokens,
     return unpermuted_tokens
 
 GMM_BWD_TENSORS_NEEDED = None
-LL2ALL_EXPERTS_OUTPUT = None
+ALL2ALL_EXPERTS_OUTPUT = None
 
 def set_gemm_backward_need_tensors(_inputs):
     global GEMM_BACKWARD_NEED_TENSORS

@@ -181,7 +181,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
                 global_input_tokens, moe_layer.token_dispatcher.reversed_global_input_permutation_mapping = permute(
                     global_input_tokens, 
                     moe_layer.token_dispatcher.global_input_tokens_local_experts_indices,
-                    permute_fusion=False,
+                    permute_fusion=True,
                 )
 
                 # TODO: add TP support here
@@ -217,11 +217,19 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             hidden_states = unpermute(
                 hidden_states, 
                 moe_layer.token_dispatcher.reversed_global_input_permutation_mapping,
-                unpermute_fusion=False,
+                unpermute_fusion=True,
             )
             return hidden_states
 
-        expert_output, unpermute1_input_detach = forward_func(alltoall_token_unpermutation1, expert_output)
+        #expert_output, unpermute1_input_detach = forward_func(alltoall_token_unpermutation1, expert_output)
+        unpermute1_input_detach = expert_output.detach()
+
+        expert_output = unpermute(
+            expert_output,
+            moe_layer.token_dispatcher.reversed_global_input_permutation_mapping,
+            unpermute_fusion=True,
+        )
+
         save_tensors.append(unpermute1_input_detach)
         save_tensors.append(expert_output)
         save_tensors_for_grad.append(unpermute1_input_detach)

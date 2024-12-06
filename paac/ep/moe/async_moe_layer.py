@@ -14,7 +14,7 @@ from .experts import GroupedMLP, SequentialMLP, TEGroupedMLP
 from .router import TopKRouter
 # from megatron.core.transformer.moe.shared_experts import SharedExpertMLP
 from .shared_experts import SharedExpertMLP
-from megatron.core.transformer.moe.token_dispatcher import (
+from .token_dispatcher import (
     MoEAllGatherTokenDispatcher,
     MoEAlltoAllTokenDispatcher,
 )
@@ -178,17 +178,24 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         # Permutation 2: AlltoAll output to expert input if num_local_experts > 1
         if moe_layer.num_local_experts > 1:
             def alltoall_token_permutation2(global_input_tokens):
-                global_input_tokens, moe_layer.token_dispatcher.reversed_global_input_permutation_mapping = permute(
-                    global_input_tokens, 
-                    moe_layer.token_dispatcher.global_input_tokens_local_experts_indices,
-                    permute_fusion=False,
+                #global_input_tokens, moe_layer.token_dispatcher.reversed_global_input_permutation_mapping = permute(
+                #    global_input_tokens, 
+                #    moe_layer.token_dispatcher.global_input_tokens_local_experts_indices,
+                #    permute_fusion=False,
+                #)
+
+                global_input_tokens = sort_chunks_by_idxs(
+                    global_input_tokens,
+                    moe_layer.token_dispatcher.num_global_tokens_per_local_expert_cpu.ravel(),
+                    moe_layer.token_dispatcher.sort_input_by_local_experts,
                 )
+                
 
                 # TODO: add TP support here
 
                 return global_input_tokens
 
-            # token 重排2 input
+            # token 2 input
             (global_input_tokens), global_input_tokens_detach = forward_func(alltoall_token_permutation2,
                                                                              global_input_tokens)
             save_tensors.append(global_input_tokens_detach)
@@ -214,18 +221,26 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             # Unpermutation 2: expert output to AlltoAll input
             # hidden_states: [SEQL, H] -> [SEQL, H/TP]
             #if moe_layer.token_dispatcher.num_local_experts > 1:
-            hidden_states = unpermute(
-                hidden_states, 
-                moe_layer.token_dispatcher.reversed_global_input_permutation_mapping,
-                unpermute_fusion=False,
+            #hidden_states = unpermute(
+            #    hidden_states, 
+            #    moe_layer.token_dispatcher.reversed_global_input_permutation_mapping,
+            #    unpermute_fusion=True,
+            #)
+
+            hidden_states = sort_chunks_by_idxs(
+                hidden_states,
+                moe_layer.token_dispatcher.num_global_tokens_per_local_expert_cpu.T.ravel(),
+                moe_layer.token_dispatcher.restore_output_by_local_experts,
             )
+
             return hidden_states
 
         expert_output, unpermute1_input_detach = forward_func(alltoall_token_unpermutation1, expert_output)
         #unpermute1_input_detach = expert_output.detach()
+        #unpermute1_input_detach.requires_grad = True
 
-        #print(f"expert_output={expert_output}")
-        #print(f"unpermute1_input_detach={unpermute1_input_detach}")
+        print(f"expert_output={expert_output}")
+        print(f"unpermute1_input_detach={unpermute1_input_detach}")
 
         #expert_output = unpermute(
         #    unpermute1_input_detach,
@@ -236,7 +251,7 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
         save_tensors.append(unpermute1_input_detach)
         save_tensors.append(expert_output)
         save_tensors_for_grad.append(unpermute1_input_detach)
-        unpermute1_input_detach.untyped_storage().resize_(0)
+        # unpermute1_input_detach.untyped_storage().resize_(0)
 
         # alltoall 
         permutated_local_input_tokens, unpermute_ep_all_to_all_handle = async_all_to_all(
@@ -352,8 +367,16 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             shared_experts_graph = None
         
         handle.wait()
+        print(f"before unperm1 graph, unpermute1_input_detach={unpermute1_input_detach}")
+
+        print(f"unpermute1_graph={unpermute1_graph}")
+        print(f"unpermute1_backward_input={unpermute1_backward_input}")
 
         backward_func(unpermute1_graph, unpermute1_backward_input)
+
+        print(f"unpermute1_input_detach={unpermute1_input_detach}")
+        print(f"unpermute1_input_detach.grad={unpermute1_input_detach.grad}")
+
         backward_func(experts_graph, unpermute1_input_detach.grad)
         # backward_func(permute2_graph, experts_input_detach.grad)
 

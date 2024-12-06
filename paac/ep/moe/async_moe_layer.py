@@ -236,17 +236,6 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             return hidden_states
 
         expert_output, unpermute1_input_detach = forward_func(alltoall_token_unpermutation1, expert_output)
-        #unpermute1_input_detach = expert_output.detach()
-        #unpermute1_input_detach.requires_grad = True
-
-        print(f"expert_output={expert_output}")
-        print(f"unpermute1_input_detach={unpermute1_input_detach}")
-
-        #expert_output = unpermute(
-        #    unpermute1_input_detach,
-        #    moe_layer.token_dispatcher.reversed_global_input_permutation_mapping,
-        #    unpermute_fusion=True,
-        #)
 
         save_tensors.append(unpermute1_input_detach)
         save_tensors.append(expert_output)
@@ -367,15 +356,8 @@ class MoELayerOverlapAll2All(torch.autograd.Function):
             shared_experts_graph = None
         
         handle.wait()
-        print(f"before unperm1 graph, unpermute1_input_detach={unpermute1_input_detach}")
-
-        print(f"unpermute1_graph={unpermute1_graph}")
-        print(f"unpermute1_backward_input={unpermute1_backward_input}")
 
         backward_func(unpermute1_graph, unpermute1_backward_input)
-
-        print(f"unpermute1_input_detach={unpermute1_input_detach}")
-        print(f"unpermute1_input_detach.grad={unpermute1_input_detach.grad}")
 
         backward_func(experts_graph, unpermute1_input_detach.grad)
         # backward_func(permute2_graph, experts_input_detach.grad)

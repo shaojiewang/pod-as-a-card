@@ -52,9 +52,6 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, *grad_outs):
-
-        print("in gmm backward")
-
         inputs, act_inputs, mm2_inputs, weights1, weights2, original_weight1, original_weight2, tokens_per_expert = ctx.saved_tensors
         grad_outs = grad_outs[0]
 

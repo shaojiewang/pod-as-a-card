@@ -61,8 +61,8 @@ def unpermute(permuted_tokens,
     assert sorted_indices.numel() == permuted_tokens.size(0)
     
     if unpermute_fusion and fused_unpermute is not None:
-      unpermuted_tokens = fused_unpermute(permuted_tokens, sorted_indices, probs)
-      return unpermuted_tokens
+        unpermuted_tokens = fused_unpermute(permuted_tokens, sorted_indices, probs)
+        return unpermuted_tokens
 
     if probs is not None:
         # Unpermute and merge the tokens with their probabilities

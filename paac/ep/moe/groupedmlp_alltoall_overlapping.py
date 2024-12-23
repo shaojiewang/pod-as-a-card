@@ -100,6 +100,8 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
         )
 
         grad_outs.untyped_storage().resize_(0)
+        mm2_inputs.untyped_storage().resize_(0)
+        
         bw_permute1_ep_all2all_handle.wait()
 
         set_all2all_experts_output((permute1_backward_input))

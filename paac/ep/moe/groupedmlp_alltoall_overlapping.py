@@ -61,14 +61,14 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
             grad_outs, weights2, tokens_per_expert, trans_a=False, trans_b=True
         )
 
-        grad_weight2 = backend.gmm(
-            mm2_inputs, grad_outs, tokens_per_expert, trans_a=True, trans_b=False
-        )
+        #grad_weight2 = backend.gmm(
+        #    mm2_inputs, grad_outs, tokens_per_expert, trans_a=True, trans_b=False
+        #)
 
 
         act_graph = mm2_inputs
         # grad of activation_func
-        grad_outs.untyped_storage().resize_(0)
+        # grad_outs.untyped_storage().resize_(0)
         # mm2_inputs.untyped_storage().resize_(0)
 
         act_graph.backward(grad_gmm2_inputs)
@@ -95,6 +95,11 @@ class GroupedMlpAlltoallOverlapping(torch.autograd.Function):
             inputs, act_inputs.grad, tokens_per_expert, trans_a=True, trans_b=False
         )
 
+        grad_weight2 = backend.gmm(
+            mm2_inputs, grad_outs, tokens_per_expert, trans_a=True, trans_b=False
+        )
+
+        grad_outs.untyped_storage().resize_(0)
         bw_permute1_ep_all2all_handle.wait()
 
         set_all2all_experts_output((permute1_backward_input))

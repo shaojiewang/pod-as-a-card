@@ -451,25 +451,3 @@ class AsyncMoELayer(BaseMoELayer):
         
         return MoELayerOverlapAll2All.apply(hidden_states, self)
 
-        # process MoE
-        def custom_forward(hidden_states):
-            probs, indices = self.router(hidden_states)
-            (dispatched_input, tokens_per_expert) = self.token_dispatcher.token_permutation(
-                hidden_states, probs, indices
-            )
-            expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
-            output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
-            if self.use_shared_expert and not self.shared_expert_overlap:
-                # if shared_expert_overlap is True, the expert calculation happens in
-                # the token_dispatcher to overlap communications and computations
-                output += self.shared_experts(hidden_states)
-            return output, mlp_bias
-
-        if self.moe_layer_recompute:
-            output, mlp_bias = tensor_parallel.checkpoint(custom_forward, False, hidden_states)
-        else:
-            output, mlp_bias = custom_forward(hidden_states)
-
-        return output, mlp_bias
-
-
